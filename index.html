@@ -46,18 +46,20 @@
 
   <a-entity mindar-image-target="targetIndex: 0">
 
-    <!-- LEFT -->
+    <!-- LEFT VIDEO -->
     <a-plane
       src="#vid-napari"
-      position="-0.3 0.3 0"
+      material="shader: flat; transparent: true"
+      position="-0.25 0.25 0"
       height="0.253"
       width="0.45"
     ></a-plane>
 
-    <!-- RIGHT -->
+    <!-- RIGHT VIDEO -->
     <a-plane
       src="#vid-zen"
-      position="0.3 0.3 0"
+      material="shader: flat; transparent: true"
+      position="0.25 0.25 0"
       height="0.253"
       width="0.45"
     ></a-plane>
@@ -71,10 +73,20 @@ window.addEventListener("load", () => {
   const videos = document.querySelectorAll("video");
   const target = document.querySelector("[mindar-image-target]");
 
+  // Prime video decoders early (fixes black planes)
+  videos.forEach(v => {
+    v.muted = true;
+    v.loop = true;
+
+    v.play()
+      .then(() => {
+        v.pause(); // important: warms up first frame
+      })
+      .catch(() => {});
+  });
+
   target.addEventListener("targetFound", () => {
-    videos.forEach(v => {
-      v.play().catch(() => {});
-    });
+    videos.forEach(v => v.play().catch(() => {}));
   });
 
   target.addEventListener("targetLost", () => {
