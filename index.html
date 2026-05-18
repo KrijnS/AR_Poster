@@ -2,87 +2,112 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Poster AR</title>
-
   <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
   <style>
-    body { margin: 0; overflow: hidden; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; }
+
+    #tap-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      font-family: sans-serif;
+      font-size: 18px;
+      z-index: 999;
+      cursor: pointer;
+    }
+    #tap-overlay span { font-size: 48px; }
+    #tap-overlay.hidden { display: none; }
   </style>
 </head>
-
 <body>
 
-<a-scene
-  mindar-image="imageTargetSrc: ./targets.mind; autoStart: true;"
-  vr-mode-ui="enabled: false"
-  device-orientation-permission-ui="enabled: true"
->
+<div id="tap-overlay">
+  <span>📷</span>
+  Tap to start AR
+</div>
 
-  <a-assets>
+<a-scene
+  mindar-image="imageTargetSrc: ./targets.mind; autoStart: false;"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  renderer="colorManagement: true"
+>
+  <a-assets timeout="15000">
     <video
       id="vid-napari"
       src="./napari-sam3.mp4"
+      autoplay
       loop
       muted
       playsinline
       webkit-playsinline
-      crossorigin="anonymous"
     ></video>
-
     <video
       id="vid-zen"
       src="./zen-sam3.mp4"
+      autoplay
       loop
       muted
       playsinline
       webkit-playsinline
-      crossorigin="anonymous"
     ></video>
   </a-assets>
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
   <a-entity mindar-image-target="targetIndex: 0">
-
-    <!-- LEFT VIDEO -->
     <a-plane
-      src="#vid-napari"
-      material="shader: flat; transparent: true"
+      material="shader: flat; src: #vid-napari; transparent: true"
       position="-0.25 0.25 0"
       height="0.253"
       width="0.45"
     ></a-plane>
-
-    <!-- RIGHT VIDEO -->
     <a-plane
-      src="#vid-zen"
-      material="shader: flat; transparent: true"
+      material="shader: flat; src: #vid-zen; transparent: true"
       position="0.25 0.25 0"
       height="0.253"
       width="0.45"
     ></a-plane>
-
   </a-entity>
-
 </a-scene>
 
 <script>
-window.addEventListener("load", () => {
+  const overlay = document.getElementById("tap-overlay");
+  const sceneEl = document.querySelector("a-scene");
   const videos = document.querySelectorAll("video");
   const target = document.querySelector("[mindar-image-target]");
 
-  // Prime video decoders early (fixes black planes)
-  videos.forEach(v => {
-    v.muted = true;
-    v.loop = true;
+  function startAR() {
+    overlay.classList.add("hidden");
 
-    v.play()
-      .then(() => {
-        v.pause(); // important: warms up first frame
-      })
-      .catch(() => {});
+    videos.forEach(v => {
+      v.muted = true;
+      v.play().catch(() => {});
+    });
+
+    if (sceneEl.hasLoaded) {
+      sceneEl.systems["mindar-image-system"].start();
+    } else {
+      sceneEl.addEventListener("loaded", () => {
+        sceneEl.systems["mindar-image-system"].start();
+      }, { once: true });
+    }
+  }
+
+  overlay.addEventListener("click", startAR);
+  overlay.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    startAR();
   });
 
   target.addEventListener("targetFound", () => {
@@ -92,8 +117,6 @@ window.addEventListener("load", () => {
   target.addEventListener("targetLost", () => {
     videos.forEach(v => v.pause());
   });
-});
 </script>
-
 </body>
 </html>
