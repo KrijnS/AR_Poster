@@ -21,8 +21,16 @@
 
     <a-assets>
       <video
-        id="vid"
-        src="./sam3-demo.mp4"
+        id="vid-napari"
+        src="./napari-sam3.mp4"
+        loop
+        autoplay
+        muted
+        playsinline
+      ></video>
+      <video
+        id="vid-zen"
+        src="./zen-sam3.mp4"
         loop
         autoplay
         muted
@@ -34,10 +42,16 @@
 
     <a-entity mindar-image-target="targetIndex: 0">
       <a-plane
-        src="#vid"
-        position="0 0 0"
-        height="1"
-        width="1.777"
+        src="#vid-napari"
+        position="-0.5 -0.3 0"
+        height="0.253"
+        width="0.45"
+      ></a-plane>
+      <a-plane
+        src="#vid-zen"
+        position="0.5 -0.3 0"
+        height="0.253"
+        width="0.45"
       ></a-plane>
     </a-entity>
 
