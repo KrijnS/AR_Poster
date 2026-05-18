@@ -37,7 +37,12 @@
 </div>
 
 <a-scene
-  mindar-image="imageTargetSrc: ./targets.mind; autoStart: false;"
+  mindar-image="imageTargetSrc: ./targets.mind;
+                autoStart: false;
+                filterMinCF: 0.001;
+                filterBeta: 0.01;
+                missTolerance: 5;
+                warmupTolerance: 5;"
   vr-mode-ui="enabled: false"
   device-orientation-permission-ui="enabled: false"
   renderer="colorManagement: true"
@@ -46,77 +51,178 @@
     <video
       id="vid-napari"
       src="./napari-sam3.mp4"
-      autoplay
-      loop
-      muted
-      playsinline
-      webkit-playsinline
+      autoplay loop muted playsinline webkit-playsinline
     ></video>
     <video
       id="vid-zen"
       src="./zen-sam3.mp4"
-      autoplay
-      loop
-      muted
-      playsinline
-      webkit-playsinline
+      autoplay loop muted playsinline webkit-playsinline
     ></video>
   </a-assets>
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
 
-  <a-entity mindar-image-target="targetIndex: 0">
+  <a-entity mindar-image-target="targetIndex: 0" id="ar-target">
     <a-plane
+      id="plane-napari"
       material="shader: flat; src: #vid-napari; transparent: true"
       position="-0.25 0.25 0"
       height="0.253"
       width="0.45"
+      pinch-zoom="baseWidth: 0.45; baseHeight: 0.253"
     ></a-plane>
     <a-plane
+      id="plane-zen"
       material="shader: flat; src: #vid-zen; transparent: true"
       position="0.25 0.25 0"
       height="0.253"
       width="0.45"
+      pinch-zoom="baseWidth: 0.45; baseHeight: 0.253"
     ></a-plane>
   </a-entity>
 </a-scene>
 
 <script>
-  const overlay = document.getElementById("tap-overlay");
-  const sceneEl = document.querySelector("a-scene");
-  const videos = document.querySelectorAll("video");
-  const target = document.querySelector("[mindar-image-target]");
+// ─── Pinch-to-zoom component ──────────────────────────────────────────────────
+// Attaches to each plane. Listens for two-finger pinch on the canvas and
+// scales the plane's width/height proportionally. A second two-finger tap resets.
 
-  function startAR() {
-    overlay.classList.add("hidden");
+AFRAME.registerComponent("pinch-zoom", {
+  schema: {
+    baseWidth:  { type: "number", default: 0.45 },
+    baseHeight: { type: "number", default: 0.253 },
+    minScale:   { type: "number", default: 0.5 },
+    maxScale:   { type: "number", default: 4.0 }
+  },
 
-    videos.forEach(v => {
-      v.muted = true;
-      v.play().catch(() => {});
+  init() {
+    this.scale       = 1;
+    this.lastDist    = null;
+    this.lastTap     = 0;
+    this.activePlane = null;
+
+    this._onTouchStart = this._onTouchStart.bind(this);
+    this._onTouchMove  = this._onTouchMove.bind(this);
+    this._onTouchEnd   = this._onTouchEnd.bind(this);
+
+    const canvas = this.el.sceneEl.canvas;
+    canvas.addEventListener("touchstart", this._onTouchStart, { passive: false });
+    canvas.addEventListener("touchmove",  this._onTouchMove,  { passive: false });
+    canvas.addEventListener("touchend",   this._onTouchEnd,   { passive: false });
+  },
+
+  remove() {
+    const canvas = this.el.sceneEl.canvas;
+    canvas.removeEventListener("touchstart", this._onTouchStart);
+    canvas.removeEventListener("touchmove",  this._onTouchMove);
+    canvas.removeEventListener("touchend",   this._onTouchEnd);
+  },
+
+  _dist(t1, t2) {
+    const dx = t1.clientX - t2.clientX;
+    const dy = t1.clientY - t2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  },
+
+  _midpoint(t1, t2) {
+    return {
+      x: (t1.clientX + t2.clientX) / 2,
+      y: (t1.clientY + t2.clientY) / 2
+    };
+  },
+
+  // Find which plane's projected screen position is closest to the pinch midpoint
+  _isClosestPlane(midX, midY) {
+    if (this.activePlane && this.activePlane !== this.el) return false;
+
+    const planes = Array.from(document.querySelectorAll("[pinch-zoom]"));
+    if (planes.length < 2) return true;
+
+    const cameraEl = document.querySelector("a-camera");
+    const camera   = cameraEl.getObject3D("camera");
+    const renderer = this.el.sceneEl.renderer;
+    const w = renderer.domElement.clientWidth;
+    const h = renderer.domElement.clientHeight;
+
+    let best = null, bestDist = Infinity;
+    planes.forEach(p => {
+      const worldPos = new THREE.Vector3();
+      p.object3D.getWorldPosition(worldPos);
+      worldPos.project(camera);
+      const sx = ( worldPos.x + 1) / 2 * w;
+      const sy = (-worldPos.y + 1) / 2 * h;
+      const d  = Math.hypot(sx - midX, sy - midY);
+      if (d < bestDist) { bestDist = d; best = p; }
     });
+    return best === this.el;
+  },
 
-    if (sceneEl.hasLoaded) {
-      sceneEl.systems["mindar-image-system"].start();
-    } else {
-      sceneEl.addEventListener("loaded", () => {
-        sceneEl.systems["mindar-image-system"].start();
-      }, { once: true });
-    }
-  }
+  _onTouchStart(e) {
+    if (e.touches.length !== 2) return;
+    const mid = this._midpoint(e.touches[0], e.touches[1]);
+    if (!this._isClosestPlane(mid.x, mid.y)) return;
 
-  overlay.addEventListener("click", startAR);
-  overlay.addEventListener("touchend", (e) => {
+    this.activePlane = this.el;
+    this.lastDist    = this._dist(e.touches[0], e.touches[1]);
+
+    // Double two-finger tap resets scale
+    const now = Date.now();
+    if (now - this.lastTap < 350) this._resetScale();
+    this.lastTap = now;
+  },
+
+  _onTouchMove(e) {
+    if (e.touches.length !== 2) return;
+    if (this.activePlane !== this.el) return;
     e.preventDefault();
-    startAR();
-  });
 
-  target.addEventListener("targetFound", () => {
-    videos.forEach(v => v.play().catch(() => {}));
-  });
+    const dist  = this._dist(e.touches[0], e.touches[1]);
+    const ratio = dist / this.lastDist;
+    this.lastDist = dist;
 
-  target.addEventListener("targetLost", () => {
-    videos.forEach(v => v.pause());
-  });
+    this.scale = Math.min(
+      this.data.maxScale,
+      Math.max(this.data.minScale, this.scale * ratio)
+    );
+    this._applyScale();
+  },
+
+  _onTouchEnd(e) {
+    if (e.touches.length < 2 && this.activePlane === this.el) {
+      this.activePlane = null;
+      this.lastDist    = null;
+    }
+  },
+
+  _applyScale() {
+    this.el.setAttribute("width",  this.data.baseWidth  * this.scale);
+    this.el.setAttribute("height", this.data.baseHeight * this.scale);
+  },
+
+  _resetScale() {
+    this.scale = 1;
+    this._applyScale();
+  }
+});
+
+// ─── Startup ──────────────────────────────────────────────────────────────────
+const overlay = document.getElementById("tap-overlay");
+const sceneEl = document.querySelector("a-scene");
+const videos  = document.querySelectorAll("video");
+const target  = document.querySelector("[mindar-image-target]");
+
+function startAR() {
+  overlay.classList.add("hidden");
+  videos.forEach(v => { v.muted = true; v.play().catch(() => {}); });
+  const go = () => sceneEl.systems["mindar-image-system"].start();
+  sceneEl.hasLoaded ? go() : sceneEl.addEventListener("loaded", go, { once: true });
+}
+
+overlay.addEventListener("click",    startAR);
+overlay.addEventListener("touchend", e => { e.preventDefault(); startAR(); });
+
+target.addEventListener("targetFound", () => videos.forEach(v => v.play().catch(() => {})));
+target.addEventListener("targetLost",  () => videos.forEach(v => v.pause()));
 </script>
 </body>
 </html>
