@@ -49,6 +49,7 @@
   <a-assets timeout="15000">
     <video id="vid-napari" src="./napari-sam3.mp4" autoplay loop muted playsinline webkit-playsinline></video>
     <video id="vid-zen"    src="./zen-sam3.mp4"    autoplay loop muted playsinline webkit-playsinline></video>
+    <video id="vid-sm"     src="./smart-mic.mp4"    autoplay loop muted playsinline webkit-playsinline></video>
   </a-assets>
 
   <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
@@ -69,6 +70,14 @@
       height="0.253"
       width="0.45"
       pinch-zoom="baseWidth: 0.45; baseHeight: 0.253; baseX: 0.25; baseY: 0.25"
+    ></a-plane>
+    <a-plane
+      id="plane-sm"
+      material="shader: flat; src: #vid-sm; transparent: true"
+      position="0 -0.25 0"
+      height="0.5"
+      width="0.9"
+      pinch-zoom="baseWidth: 0.45; baseHeight: 0.253; baseX: 0; baseY: 0.25"
     ></a-plane>
   </a-entity>
 </a-scene>
